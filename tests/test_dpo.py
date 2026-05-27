@@ -98,3 +98,17 @@ def test_eval_winrate_no_data():
     assert r.status_code == 200
     data = r.json()
     assert "message" in data or "win_rates" in data
+
+def test_preference_quality_check():
+    r = client.get("/preferences/quality")
+    assert r.status_code == 200
+    data = r.json()
+    assert "total_pairs" in data
+    assert "flagged" in data
+    assert "threshold" in data
+    assert isinstance(data["flagged_pairs"], list)
+
+def test_preference_quality_custom_threshold():
+    r = client.get("/preferences/quality?threshold=0.5")
+    assert r.status_code == 200
+    assert r.json()["threshold"] == 0.5

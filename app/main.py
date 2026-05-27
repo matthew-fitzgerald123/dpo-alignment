@@ -146,6 +146,31 @@ def _pick_winner(comparison: dict) -> str:
     }
     return max(scores, key=scores.get)
 
+@app.get("/preferences/quality", tags=["data"])
+def preference_quality_check(threshold: float = 0.8, db: Session = Depends(get_db)):
+    """Flags pairs where chosen and rejected responses are near-identical."""
+    pairs = db.query(PreferencePair).all()
+    flagged = []
+    for p in pairs:
+        chosen_tokens   = set(p.chosen.lower().split())
+        rejected_tokens = set(p.rejected.lower().split())
+        union        = len(chosen_tokens | rejected_tokens)
+        intersection = len(chosen_tokens & rejected_tokens)
+        similarity   = round(intersection / union, 4) if union > 0 else 0.0
+        if similarity >= threshold:
+            flagged.append({
+                "pair_id":    p.pair_id,
+                "domain":     p.domain,
+                "similarity": similarity,
+                "issue":      "chosen and rejected are near-identical",
+            })
+    return {
+        "total_pairs":   len(pairs),
+        "flagged":       len(flagged),
+        "threshold":     threshold,
+        "flagged_pairs": flagged,
+    }
+
 @app.get("/eval/winrate", tags=["eval"])
 def eval_winrate(db: Session = Depends(get_db)):
     """Per-metric win rate: fraction of prompts where DPO outscores SFT."""
