@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+*.db
+mlruns/
+adapters/dpo_financial/
+data/train.jsonl
+data/valid.jsonl
+data/preference_pairs.jsonl
+data/eval_results.json
+data/loss_curve.json
