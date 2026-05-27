@@ -146,6 +146,48 @@ def _pick_winner(comparison: dict) -> str:
     }
     return max(scores, key=scores.get)
 
+@app.get("/eval/winrate", tags=["eval"])
+def eval_winrate(db: Session = Depends(get_db)):
+    """Per-metric win rate: fraction of prompts where DPO outscores SFT."""
+    results = db.query(EvalResult).all()
+    if not results:
+        return {"message": "No eval results yet. Run: make eval"}
+
+    by_prompt: dict[str, dict] = {}
+    for r in results:
+        if r.prompt not in by_prompt:
+            by_prompt[r.prompt] = {}
+        by_prompt[r.prompt][r.model_name] = r
+
+    metrics = ["helpfulness", "harmlessness", "factuality"]
+    wins  = {m: 0 for m in metrics}
+    ties  = {m: 0 for m in metrics}
+    total = 0
+
+    for models in by_prompt.values():
+        if "sft" not in models or "dpo" not in models:
+            continue
+        sft = models["sft"]
+        dpo = models["dpo"]
+        total += 1
+        for m in metrics:
+            dpo_score = getattr(dpo, m) or 0.0
+            sft_score = getattr(sft, m) or 0.0
+            if dpo_score > sft_score:
+                wins[m] += 1
+            elif abs(dpo_score - sft_score) < 1e-6:
+                ties[m] += 1
+
+    if total == 0:
+        return {"message": "Need both sft and dpo results. Run: make eval"}
+
+    return {
+        "total_prompts_compared": total,
+        "win_rates": {m: round(wins[m] / total, 4) for m in metrics},
+        "tie_rates": {m: round(ties[m] / total, 4) for m in metrics},
+        "overall_win_rate": round(sum(wins.values()) / (len(metrics) * total), 4),
+    }
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

@@ -92,3 +92,9 @@ def test_eval_comparison_no_data():
 def test_filter_by_domain():
     r = client.get("/preferences?domain=financial_analysis")
     assert r.status_code == 200
+
+def test_eval_winrate_no_data():
+    r = client.get("/eval/winrate")
+    assert r.status_code == 200
+    data = r.json()
+    assert "message" in data or "win_rates" in data
