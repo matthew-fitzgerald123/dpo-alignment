@@ -5,7 +5,7 @@ Run: make train-dpo
 Prerequisites: make generate-data first
 """
 from __future__ import annotations
-import sys, os, uuid, subprocess, time, json
+import sys, os, uuid, subprocess, time, json, re
 sys.path.insert(0, ".")
 
 from dotenv import load_dotenv
@@ -83,17 +83,36 @@ def train():
 
         t_start = time.time()
 
-        result = subprocess.run(
+        process = subprocess.Popen(
             ["caffeinate", "-i"] + cmd,
-            capture_output=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
 
+        loss_steps = []
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            m = re.search(r"Iter\s+(\d+).*?train loss\s+([\d.]+)", line)
+            if m:
+                step = int(m.group(1))
+                loss = float(m.group(2))
+                loss_steps.append({"step": step, "loss": loss})
+                mlflow.log_metric("train_loss", loss, step=step)
+
+        process.wait()
         duration = round(time.time() - t_start, 1)
 
-        if result.returncode != 0:
+        if process.returncode != 0:
             mlflow.set_tag("status", "failed")
-            print(f"\nTraining failed with return code {result.returncode}")
+            print(f"\nTraining failed with return code {process.returncode}")
             sys.exit(1)
+
+        if loss_steps:
+            mlflow.log_metric("final_loss", loss_steps[-1]["loss"])
+            with open("data/loss_curve.json", "w") as f:
+                json.dump(loss_steps, f, indent=2)
+            print(f"Loss curve: {len(loss_steps)} points logged to MLflow")
 
         mlflow.log_metrics({
             "training_duration_seconds": duration,
