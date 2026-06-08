@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -25,7 +26,6 @@ class PairReq(BaseModel):
 
 @app.post("/preferences", tags=["data"])
 def add_preference_pair(req: PairReq, db: Session = Depends(get_db)):
-    import uuid
     pair = PreferencePair(
         pair_id=str(uuid.uuid4())[:8],
         prompt=req.prompt,
@@ -68,6 +68,46 @@ def preference_stats(db: Session = Depends(get_db)):
     return {
         "total_pairs": total,
         "by_domain": {d: c for d, c in by_domain},
+    }
+
+@app.get("/preferences/quality", tags=["data"])
+def preference_quality_check(threshold: float = 0.8, db: Session = Depends(get_db)):
+    """Flags pairs where chosen and rejected responses are near-identical."""
+    pairs = db.query(PreferencePair).all()
+    flagged = []
+    for p in pairs:
+        chosen_tokens   = set(p.chosen.lower().split())
+        rejected_tokens = set(p.rejected.lower().split())
+        union        = len(chosen_tokens | rejected_tokens)
+        intersection = len(chosen_tokens & rejected_tokens)
+        similarity   = round(intersection / union, 4) if union > 0 else 0.0
+        if similarity >= threshold:
+            flagged.append({
+                "pair_id":    p.pair_id,
+                "domain":     p.domain,
+                "similarity": similarity,
+                "issue":      "chosen and rejected are near-identical",
+            })
+    return {
+        "total_pairs":   len(pairs),
+        "flagged":       len(flagged),
+        "threshold":     threshold,
+        "flagged_pairs": flagged,
+    }
+
+@app.get("/preferences/{pair_id}", tags=["data"])
+def get_preference_pair(pair_id: str, db: Session = Depends(get_db)):
+    pair = db.query(PreferencePair).filter_by(pair_id=pair_id).first()
+    if not pair:
+        raise HTTPException(404, f"Preference pair '{pair_id}' not found")
+    return {
+        "pair_id":  pair.pair_id,
+        "domain":   pair.domain,
+        "source":   pair.source,
+        "prompt":   pair.prompt,
+        "chosen":   pair.chosen,
+        "rejected": pair.rejected,
+        "created_at": str(pair.created_at),
     }
 
 # Training runs
@@ -145,31 +185,6 @@ def _pick_winner(comparison: dict) -> str:
         for m, metrics in comparison.items()
     }
     return max(scores, key=scores.get)
-
-@app.get("/preferences/quality", tags=["data"])
-def preference_quality_check(threshold: float = 0.8, db: Session = Depends(get_db)):
-    """Flags pairs where chosen and rejected responses are near-identical."""
-    pairs = db.query(PreferencePair).all()
-    flagged = []
-    for p in pairs:
-        chosen_tokens   = set(p.chosen.lower().split())
-        rejected_tokens = set(p.rejected.lower().split())
-        union        = len(chosen_tokens | rejected_tokens)
-        intersection = len(chosen_tokens & rejected_tokens)
-        similarity   = round(intersection / union, 4) if union > 0 else 0.0
-        if similarity >= threshold:
-            flagged.append({
-                "pair_id":    p.pair_id,
-                "domain":     p.domain,
-                "similarity": similarity,
-                "issue":      "chosen and rejected are near-identical",
-            })
-    return {
-        "total_pairs":   len(pairs),
-        "flagged":       len(flagged),
-        "threshold":     threshold,
-        "flagged_pairs": flagged,
-    }
 
 @app.get("/eval/winrate", tags=["eval"])
 def eval_winrate(db: Session = Depends(get_db)):
