@@ -52,6 +52,8 @@ make test
 | POST | `/preferences` | Add a chosen/rejected preference pair |
 | GET | `/preferences` | List pairs, filter by domain |
 | GET | `/preferences/stats` | Total pairs by domain |
+| GET | `/preferences/quality` | Flag pairs where chosen and rejected responses are near-identical |
+| GET | `/preferences/{pair_id}` | Fetch a single preference pair by ID |
 
 ### Training
 
@@ -65,6 +67,7 @@ make test
 |---|---|---|
 | GET | `/eval/results` | Per-prompt eval scores (helpfulness, harmlessness, factuality) |
 | GET | `/eval/comparison` | Averaged SFT vs DPO scores + winner |
+| GET | `/eval/winrate` | Per-metric win/tie rate: fraction of prompts where DPO outscores SFT |
 | GET | `/health` | Server status |
 
 Interactive docs at `http://localhost:8085/docs`.
