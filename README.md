@@ -88,6 +88,7 @@ adapters/       saved LoRA adapter weights (output of train_dpo.py)
 notebooks/
   demo.py       end-to-end demo
 tests/
+  test_dpo.py   API and training pipeline tests
 ```
 
 ## Notes
